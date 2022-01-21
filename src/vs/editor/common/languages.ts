@@ -743,6 +743,12 @@ export interface InlineCompletion {
 	readonly range?: IRange;
 
 	readonly command?: Command;
+
+	/**
+	 * If set to `true`, unopened closing brackets are removed and unclosed opening brackets are closed.
+	 * Defaults to `false`.
+	*/
+	readonly completeBracketPairs?: boolean;
 }
 
 export interface InlineCompletions<TItem extends InlineCompletion = InlineCompletion> {
