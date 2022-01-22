@@ -199,9 +199,9 @@ export class MainThreadAuthentication extends Disposable implements MainThreadAu
 		return choice === 0;
 	}
 
-	private async setTrustedExtensionAndAccountPreference(providerId: string, accountName: string, extensionId: string, extensionName: string, sessionId: string): Promise<void> {
+	private async setTrustedExtensionAndAccountPreference(providerId: string, accountName: string, extensionId: string, extensionName: string, sessionId: string, scopes: string[]): Promise<void> {
 		this.authenticationService.updatedAllowedExtension(providerId, accountName, extensionId, extensionName, true);
-		this.storageService.store(`${extensionName}-${providerId}`, sessionId, StorageScope.GLOBAL, StorageTarget.MACHINE);
+		this.storageService.store(`${extensionName}-${providerId}-${scopes.join('-')}`, sessionId, StorageScope.GLOBAL, StorageTarget.MACHINE);
 
 	}
 
@@ -227,9 +227,28 @@ export class MainThreadAuthentication extends Disposable implements MainThreadAu
 		if (!options.forceNewSession && sessions.length) {
 			if (supportsMultipleAccounts) {
 				if (options.clearSessionPreference) {
-					this.storageService.remove(`${extensionName}-${providerId}`, StorageScope.GLOBAL);
+					this.storageService.remove(`${extensionName}-${providerId}-${scopes.join('-')}`, StorageScope.GLOBAL);
 				} else {
-					const existingSessionPreference = this.storageService.get(`${extensionName}-${providerId}`, StorageScope.GLOBAL);
+
+
+					//Migration previously stored keys to include scopes
+					const legacyExistingPreference = this.storageService.get(`${extensionName}-${providerId}`, StorageScope.GLOBAL);
+					if (legacyExistingPreference) {
+						const matchingSession = sessions.find(session => session.id === legacyExistingPreference);
+						if (matchingSession) {
+							const key = `${extensionName}-${providerId}-${matchingSession?.scopes.join('-')}`;
+							console.log(`MP: update ${key} | `, legacyExistingPreference);
+
+							//We want to remove the old key, and add the existingSessionId to the new key
+							//Then we can replace all the other `${extensionName}-${providerId}` to include scopes?
+							this.storageService.store(key, legacyExistingPreference, StorageScope.GLOBAL, StorageTarget.MACHINE);
+							this.storageService.remove(`${extensionName}-${providerId}`, StorageScope.GLOBAL)
+						}
+					}
+
+
+
+					const existingSessionPreference = this.storageService.get(`${extensionName}-${providerId}-${scopes.join('-')}`, StorageScope.GLOBAL);
 					if (existingSessionPreference) {
 						const matchingSession = sessions.find(session => session.id === existingSessionPreference);
 						if (matchingSession && this.authenticationService.isAccessAllowed(providerId, matchingSession.account.label, extensionId)) {
@@ -255,7 +274,7 @@ export class MainThreadAuthentication extends Disposable implements MainThreadAu
 			const session = sessions?.length && !options.forceNewSession && supportsMultipleAccounts
 				? await this.authenticationService.selectSession(providerId, extensionId, extensionName, scopes, sessions)
 				: await this.authenticationService.createSession(providerId, scopes, true);
-			await this.setTrustedExtensionAndAccountPreference(providerId, session.account.label, extensionId, extensionName, session.id);
+			await this.setTrustedExtensionAndAccountPreference(providerId, session.account.label, extensionId, extensionName, session.id, scopes);
 			return session;
 		}
 
